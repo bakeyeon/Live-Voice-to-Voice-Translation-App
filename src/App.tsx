@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react';
-import { Mic, Square, Loader2, AlertCircle, Keyboard, Volume2, FileText, Send, ArrowLeftRight, Sun, Moon, VolumeX, Presentation } from 'lucide-react';
+import { Mic, Square, Loader2, AlertCircle, Keyboard, Volume2, FileText, Send, ArrowLeftRight, Sun, Moon, VolumeX, Presentation, Zap, Gauge, AlignLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Wordmark } from './Logo';
 import { MeetingView, openSubtitleWindow } from './MeetingView';
 
 const LANGS = ['English', 'Korean', 'German', 'Japanese', 'Thai', 'Spanish', 'French', 'Italian', 'Portuguese', 'Chinese (Mandarin)', 'Russian', 'Arabic', 'Hindi'];
 type Mode = 'voice' | 'text';
+type Pace = 'fast' | 'balanced' | 'sentence';
 type Entry = { id: number; source: string; translation: string; via: Mode; done: boolean };
 
 function pcmToBase64(f32: Float32Array): string {
@@ -74,6 +75,10 @@ export default function App() {
   const [target, setTarget] = useState('Korean');
   const [input, setInput] = useState<Mode>('voice');
   const [output, setOutput] = useState<Mode>('voice');
+  const [pace, setPace] = useState<Pace>(() => {
+    try { const p = localStorage.getItem('pace'); if (p === 'fast' || p === 'balanced' || p === 'sentence') return p; } catch { /* storage unavailable */ }
+    return 'balanced';
+  });
   const [connecting, setConnecting] = useState(false);
   const [listening, setListening] = useState(false);
   const [waiting, setWaiting] = useState(false);
@@ -97,8 +102,9 @@ export default function App() {
 
   useEffect(() => { outputRef.current = output; if (output === 'text') stopPlayback(); }, [output]);
   useEffect(() => { logEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [entries]);
-  // changing languages starts a fresh session
-  useEffect(() => { closeSession(); }, [home, target]);
+  // changing languages or pace starts a fresh session
+  useEffect(() => { if (listening) stopMic(); closeSession(); }, [home, target, pace]);
+  useEffect(() => { try { localStorage.setItem('pace', pace); } catch { /* storage unavailable */ } }, [pace]);
   useEffect(() => () => { stopMic(); closeSession(); }, []);
 
   // add to the newest unfinished entry, or start one
@@ -137,13 +143,13 @@ export default function App() {
 
   // one Live session, opened on first use and reused by both voice and text input
   const session = (): Promise<WebSocket> => {
-    const langs = `${home}|${target}`;
+    const langs = `${home}|${target}|${pace}`;
     if (readyRef.current && wsLangs.current === langs && wsRef.current?.readyState === WebSocket.OPEN) return readyRef.current;
     closeSession();
     wsLangs.current = langs;
     setConnecting(true);
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${proto}://${location.host}/live?home=${encodeURIComponent(home)}&lang=${encodeURIComponent(target)}`);
+    const ws = new WebSocket(`${proto}://${location.host}/live?home=${encodeURIComponent(home)}&lang=${encodeURIComponent(target)}&pace=${pace}`);
     wsRef.current = ws;
     readyRef.current = new Promise((resolve, reject) => {
       ws.onmessage = (event) => {
@@ -266,10 +272,24 @@ export default function App() {
             options={[{ value: 'voice', label: 'Voice', icon: <Mic className="w-4 h-4" /> }, { value: 'text', label: 'Text', icon: <Keyboard className="w-4 h-4" /> }]} />
           <Segmented label="Output" value={output} onChange={setOutput}
             options={[{ value: 'voice', label: 'Voice', icon: <Volume2 className="w-4 h-4" /> }, { value: 'text', label: 'Text', icon: <FileText className="w-4 h-4" /> }]} />
+          <Segmented label="Pace" value={pace} onChange={setPace}
+            options={[{ value: 'fast', label: 'Fast', icon: <Zap className="w-4 h-4" /> }, { value: 'balanced', label: 'Balanced', icon: <Gauge className="w-4 h-4" /> }, { value: 'sentence', label: 'Sentence', icon: <AlignLeft className="w-4 h-4" /> }]} />
+          <p className="-mt-2 pl-[4.25rem] text-xs text-slate-500 dark:text-slate-400">
+            {pace === 'fast' ? 'Translates at short pauses: quickest, but long sentences may be split.' : pace === 'balanced' ? 'Translates after a brief pause: a good default.' : 'Waits for a full pause: whole sentences, a little slower.'}
+          </p>
           <button type="button" onClick={enterMeeting}
             className="mt-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-violet-500 via-sky-500 to-cyan-500 shadow-[0_6px_20px_rgba(139,92,246,0.25)] hover:brightness-105 transition">
             <Presentation className="w-4 h-4" />Meeting mode: floating live subtitles in {target === 'English' ? home : target}
           </button>
+          {/* how to speak so the interpreter keeps up: it translates at each pause, one turn at a time */}
+          <div className="rounded-xl px-4 py-3 text-xs leading-relaxed text-slate-600 dark:text-slate-300 bg-violet-50/70 dark:bg-violet-500/10 border border-violet-200/60 dark:border-violet-400/20">
+            <p className="font-semibold text-violet-700 dark:text-violet-200 mb-1">💡 Tips for smooth live subtitles</p>
+            <ul className="list-disc pl-4 space-y-0.5">
+              <li>Speak in short chunks of one or two sentences (about 5 to 10 seconds).</li>
+              <li>Pause for about {pace === 'fast' ? 'a quarter of a second' : pace === 'balanced' ? 'half a second' : 'one second'} at the end of each chunk: that pause starts the translation.</li>
+              <li>Let the subtitle appear before you go on. Starting the next chunk too soon can cut the previous translation short{pace === 'sentence' ? ', or merge the two' : ''}.</li>
+            </ul>
+          </div>
         </section>
 
         {/* conversation */}

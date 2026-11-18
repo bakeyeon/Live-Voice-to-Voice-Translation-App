@@ -4,7 +4,7 @@ import http from "http";
 import path from "path";
 import { WebSocketServer } from "ws";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
+import { GoogleGenAI, LiveServerMessage, Modality, StartSensitivity, EndSensitivity } from "@google/genai";
 
 dotenv.config({ path: ".env.local" });
 dotenv.config();
@@ -26,6 +26,14 @@ How to voice each level:
 - Formality: 75 and above, calm, measured and polite, with clear articulation. 45 to 60, everyday polite. 20 and below, casual and quick.
 - Softening particles (Thai นะ, Japanese ね, German doch / mal, a soft Korean -요) and, in written input, emoji and punctuation (!, ~, ㅋㅋ, 😊) are feeling cues. Carry them over with an equivalent particle or phrasing in the other language, and with a softer, rising or playful intonation.
 - Match the intensity of the original. Do not exaggerate.`;
+
+// How quickly a pause ends a turn. Shorter pauses mean faster subtitles, but sentences may be split.
+const PACES = {
+  fast: { startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH, endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH, prefixPaddingMs: 20, silenceDurationMs: 250 },
+  balanced: { startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH, endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH, silenceDurationMs: 500 },
+  sentence: { endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW, silenceDurationMs: 1000 },
+} as const;
+type Pace = keyof typeof PACES;
 
 const instruction = (home: string, target: string) => `You are a live interpreter between ${home} and ${target}.
 When you hear or read ${home}, translate it into ${target}. When you hear or read ${target}, translate it into ${home}.
@@ -50,10 +58,13 @@ async function startServer() {
   wss.on("connection", async (clientWs, req) => {
     let target = "Spanish";
     let home = "English";
+    let pace: Pace = "balanced";
     try {
       const url = new URL(req.url || "", `http://${req.headers.host || "localhost"}`);
       target = url.searchParams.get("lang") || target;
       home = url.searchParams.get("home") || home;
+      const p = url.searchParams.get("pace");
+      if (p && p in PACES) pace = p as Pace;
     } catch (e) {
       console.warn("Could not parse languages from URL", e);
     }
@@ -91,6 +102,7 @@ async function startServer() {
           inputAudioTranscription: {},
           outputAudioTranscription: {},
           systemInstruction: instruction(home, target),
+          realtimeInputConfig: { automaticActivityDetection: { ...PACES[pace] } },
         },
       });
       sessionPromise.then((s) => { session = s; }).catch((e) => {

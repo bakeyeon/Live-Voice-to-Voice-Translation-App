@@ -9,6 +9,7 @@ A sibling of [Sentiment Translator](https://github.com/bakeyeon/sentiment_transl
 ## Features
 - **Voice or text, in and out:** pick the input (🎙️ voice or ⌨️ text) and the output (🔊 voice or 📝 text) separately. All four combinations work, and every exchange is kept in a conversation log, original above and translation below.
 - **Meeting mode:** live subtitles that float in their own always-on-top window, over your slides or video call. Speak English and your audience reads Korean (or any language pair), with the spoken translation optional. The newest words always stay in view. This uses Document Picture-in-Picture (Chrome and Edge); other browsers get a translucent subtitle bar inside the page.
+- **Pace:** Fast, Balanced or Sentence sets how long a pause must be (0.25 s, 0.5 s or 1 s) before the interpreter translates. Faster pace means quicker subtitles. The Live API works in turns, so speak in short chunks and let each subtitle appear before you go on; the app shows these tips under the meeting-mode button.
 - **Feeling-aware interpreting:** the interpreter judges the original against SFF anchor sentences, then matches the same levels in word choice and in its voice. For example, warm and close becomes a smile in the voice, and formal becomes calm and measured. Softening particles (Thai นะ, Japanese ね, German *doch / mal*) and, in typed input, emoji, `~` and `!` are treated as feeling cues and carried over.
 - **Light and dark mode,** with the same glass look as Sentiment Translator.
 
