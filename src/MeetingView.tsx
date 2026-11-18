@@ -1,86 +1,117 @@
-import { useEffect, useRef } from 'react';
-import { X, Mic, Square, Volume2, VolumeX, Loader2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { X, Mic, Square, Volume2, VolumeX, Loader2, PictureInPicture2, ArrowDownToLine } from 'lucide-react';
+import { motion } from 'motion/react';
 import { LogoMark } from './Logo';
 
 type Entry = { id: number; source: string; translation: string; done: boolean };
-
-// Full-screen live subtitles for talks and meetings: the newest translation large, the one before it dimmed,
-// and what was actually said in small type above each.
-export function MeetingView({ entries, home, target, listening, connecting, spoken, onToggleMic, onToggleSpoken, onClose }: {
+type Props = {
   entries: Entry[]; home: string; target: string; listening: boolean; connecting: boolean; spoken: boolean;
   onToggleMic: () => void; onToggleSpoken: () => void; onClose: () => void;
+};
+
+// Document Picture-in-Picture (Chrome / Edge): a small always-on-top window that can float over slides or a video call.
+const pipApi = (): any => (window as any).documentPictureInPicture;
+
+function Captions({ entries, home, target, listening, connecting, spoken, onToggleMic, onToggleSpoken, onClose, popped, onPop }: Props & {
+  popped: boolean; onPop: (() => void) | null;
 }) {
-  const shown = entries.filter((e) => e.source || e.translation).slice(-2);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const el = rootRef.current;
-    try { el?.requestFullscreen?.().catch(() => {}); } catch { /* fullscreen not allowed */ }
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    addEventListener('keydown', onKey);
-    return () => {
-      removeEventListener('keydown', onKey);
-      if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    };
-  }, []);
-
+  const latest = [...entries].reverse().find((e) => e.source || e.translation);
+  const btn = 'w-8 h-8 shrink-0 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition';
   return (
-    <motion.div ref={rootRef} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 z-40 flex flex-col text-white bg-slate-950"
-      style={{ background: 'radial-gradient(1000px 600px at 10% 0%, rgba(139,92,246,.22), transparent 60%), radial-gradient(900px 600px at 100% 100%, rgba(34,211,238,.16), transparent 60%), #050816' }}
-      role="dialog" aria-label="Meeting mode: live subtitles">
-      <header className="flex items-center gap-3 px-5 sm:px-8 py-4">
-        <LogoMark className="w-8 h-8" />
-        <span className="font-logo text-lg"><b className="font-bold">Sentiment</b> <span className="font-light">Interpreter</span></span>
-        <span className="ml-2 px-3 py-1 rounded-full text-xs font-semibold bg-white/10 border border-white/15">{home} ⇄ {target}</span>
-        {listening && (
-          <span className="flex items-center gap-1.5 text-xs font-semibold text-rose-300">
-            <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse" />LIVE
-          </span>
-        )}
-        <div className="ml-auto flex items-center gap-2">
-          <button type="button" onClick={onToggleSpoken} aria-label={spoken ? 'Mute the spoken translation' : 'Also speak the translation'}
-            className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition">
-            {spoken ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+    <div className={`flex flex-col gap-1.5 text-white ${popped ? 'h-full p-4' : ''}`}>
+      <div className="flex items-center gap-2 text-xs">
+        <LogoMark className="w-5 h-5" />
+        <span className="font-semibold text-white/80">{home} ⇄ {target}</span>
+        {listening && <span className="flex items-center gap-1 font-semibold text-rose-300"><span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse" />LIVE</span>}
+        <div className="ml-auto flex items-center gap-1.5">
+          <button type="button" className={btn} onClick={onToggleMic} disabled={connecting} aria-label={listening ? 'Pause subtitles' : 'Start subtitles'}>
+            {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : listening ? <Square className="w-3.5 h-3.5 fill-current" /> : <Mic className="w-4 h-4" />}
           </button>
-          <button type="button" onClick={onClose} aria-label="Leave meeting mode"
-            className="w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition">
-            <X className="w-5 h-5" />
+          <button type="button" className={btn} onClick={onToggleSpoken} aria-label={spoken ? 'Mute the spoken translation' : 'Also speak the translation'}>
+            {spoken ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
           </button>
+          {onPop && (
+            <button type="button" className={btn} onClick={onPop} aria-label={popped ? 'Put the subtitles back in the page' : 'Pop out: float the subtitles over other windows'}
+              title={popped ? 'Back to the page' : 'Pop out over other windows'}>
+              {popped ? <ArrowDownToLine className="w-4 h-4" /> : <PictureInPicture2 className="w-4 h-4" />}
+            </button>
+          )}
+          <button type="button" className={btn} onClick={onClose} aria-label="Close subtitles"><X className="w-4 h-4" /></button>
         </div>
-      </header>
-
-      <main className="flex-1 flex flex-col justify-end px-6 sm:px-16 pb-8 gap-8" aria-live="polite">
-        {shown.length === 0 ? (
-          <p className="text-center text-2xl sm:text-3xl text-white/40 mb-[18vh]">
+      </div>
+      <div aria-live="polite" className={popped ? 'flex-1 flex flex-col justify-end' : ''}>
+        {latest ? (
+          <>
+            {/* live subtitles keep the newest words: older lines slide off the top */}
+            <div className="overflow-hidden flex flex-col justify-end" style={{ maxHeight: '2.7em', fontSize: popped ? 'clamp(12px, 2.6vw, 20px)' : '15px', lineHeight: 1.35 }}>
+              <p className="text-white/55">{latest.source || '…'}</p>
+            </div>
+            <div className="overflow-hidden flex flex-col justify-end" style={{ maxHeight: '3.45em', fontSize: popped ? 'clamp(18px, 5.2vw, 44px)' : 'clamp(20px, 2.6vw, 32px)', lineHeight: 1.15 }}>
+              <p className="font-semibold tracking-tight">{latest.translation || <span className="text-white/40">…</span>}</p>
+            </div>
+          </>
+        ) : (
+          <p className="text-white/50 py-2" style={{ fontSize: popped ? 'clamp(14px, 3.5vw, 24px)' : '18px' }}>
             {connecting ? 'Connecting…' : listening ? `Listening… speak ${home} or ${target}` : 'Tap the mic to start live subtitles'}
           </p>
-        ) : (
-          <AnimatePresence initial={false}>
-            {shown.map((e, i) => {
-              const latest = i === shown.length - 1;
-              return (
-                <motion.div key={e.id} layout initial={{ opacity: 0, y: 24 }} animate={{ opacity: latest ? 1 : 0.38, y: 0 }} exit={{ opacity: 0 }}
-                  transition={{ duration: 0.35 }} className="max-w-6xl">
-                  <p className={`text-white/50 ${latest ? 'text-lg sm:text-2xl' : 'text-base sm:text-lg'}`}>{e.source || '…'}</p>
-                  <p className={`mt-2 font-semibold leading-tight tracking-tight ${latest ? 'text-4xl sm:text-6xl' : 'text-2xl sm:text-4xl'}`}>
-                    {e.translation || (!e.done && <span className="text-white/40">…</span>)}
-                  </p>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
         )}
-      </main>
+      </div>
+    </div>
+  );
+}
 
-      <footer className="flex items-center justify-center pb-6">
-        <button type="button" onClick={onToggleMic} disabled={connecting} aria-label={listening ? 'Pause subtitles' : 'Start subtitles'}
-          className={`w-16 h-16 rounded-full flex items-center justify-center transition shadow-lg disabled:opacity-60 ${
-            listening ? 'bg-rose-500 hover:bg-rose-600' : 'bg-gradient-to-br from-violet-500 via-sky-500 to-cyan-400 hover:scale-105'}`}>
-          {connecting ? <Loader2 className="w-7 h-7 animate-spin" /> : listening ? <Square className="w-6 h-6 fill-current" /> : <Mic className="w-7 h-7" />}
-        </button>
-      </footer>
+// Opens the always-on-top subtitle window and brings the page's styles into it. Must be called from a click.
+export async function openSubtitleWindow(): Promise<Window | null> {
+  if (!pipApi()) return null;
+  try {
+    const w: Window = await pipApi().requestWindow({ width: 900, height: 170 });
+    document.querySelectorAll('style, link[rel="stylesheet"]').forEach((n) => w.document.head.appendChild(n.cloneNode(true)));
+    w.document.documentElement.classList.add('dark');
+    w.document.title = 'Sentiment Interpreter subtitles';
+    Object.assign(w.document.body.style, { margin: '0', height: '100vh', background: 'radial-gradient(600px 300px at 0% 0%, rgba(139,92,246,.25), transparent 60%), #070b18' });
+    return w;
+  } catch (e) {
+    console.warn('Picture-in-Picture not available', e);
+    return null;
+  }
+}
+
+// Meeting mode: subtitles in an always-on-top floating window over other apps (Chrome / Edge),
+// or a translucent bar at the bottom of the page where that isn't available.
+export function MeetingView({ initialPip = null, ...props }: Props & { initialPip?: Window | null }) {
+  const [pip, setPip] = useState<Window | null>(initialPip);
+  const canPip = !!pipApi();
+  // closing the floating window with its own X brings the subtitles back into the page
+  useEffect(() => {
+    if (!pip) return;
+    const back = () => setPip(null);
+    pip.addEventListener('pagehide', back);
+    return () => pip.removeEventListener('pagehide', back);
+  }, [pip]);
+
+  const popOut = async () => { const w = await openSubtitleWindow(); if (w) setPip(w); };
+  const popIn = () => { pip?.close(); setPip(null); };
+  const close = () => { pip?.close(); setPip(null); props.onClose(); };
+  // the window is closed explicitly (close / popIn); no cleanup effect, which React's dev-mode double mount would trigger
+
+  if (pip) {
+    return (
+      <>
+        {createPortal(<Captions {...props} onClose={close} popped onPop={popIn} />, pip.document.body)}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-4 py-2.5 rounded-full text-sm text-white bg-slate-900/80 backdrop-blur-xl border border-white/10 shadow-lg">
+          <PictureInPicture2 className="w-4 h-4 text-violet-300" />Subtitles are floating in their own window
+          <button type="button" onClick={popIn} className="font-semibold text-cyan-300 hover:underline">Bring back</button>
+        </motion.div>
+      </>
+    );
+  }
+  return (
+    <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 30 }}
+      role="region" aria-label="Meeting mode: live subtitles"
+      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[min(960px,calc(100vw-2rem))] px-5 py-3.5 rounded-2xl bg-slate-950/80 backdrop-blur-xl border border-white/10 shadow-[0_12px_40px_rgba(0,0,0,0.35)]">
+      <Captions {...props} onClose={close} popped={false} onPop={canPip ? popOut : null} />
     </motion.div>
   );
 }

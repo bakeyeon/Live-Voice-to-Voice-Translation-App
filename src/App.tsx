@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { Mic, Square, Loader2, AlertCircle, Keyboard, Volume2, FileText, Send, ArrowLeftRight, Sun, Moon, VolumeX, Presentation } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Wordmark } from './Logo';
-import { MeetingView } from './MeetingView';
+import { MeetingView, openSubtitleWindow } from './MeetingView';
 
 const LANGS = ['English', 'Korean', 'German', 'Japanese', 'Thai', 'Spanish', 'French', 'Italian', 'Portuguese', 'Chinese (Mandarin)', 'Russian', 'Arabic', 'Hindi'];
 type Mode = 'voice' | 'text';
@@ -81,6 +81,7 @@ export default function App() {
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [meeting, setMeeting] = useState(false);
+  const [meetingPip, setMeetingPip] = useState<Window | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const wsLangs = useRef('');
@@ -212,7 +213,9 @@ export default function App() {
   };
 
   const swap = () => { setHome(target); setTarget(home); };
-  const enterMeeting = () => {
+  const enterMeeting = async () => {
+    // open the floating subtitle window first, while the click still counts as a user gesture
+    setMeetingPip(await openSubtitleWindow());
     setInput('voice');
     setOutput('text');
     outputRef.current = 'text';
@@ -220,7 +223,7 @@ export default function App() {
     setMeeting(true);
     if (!listening) startMic();
   };
-  const leaveMeeting = () => { if (listening) stopMic(); setMeeting(false); };
+  const leaveMeeting = () => { if (listening) stopMic(); setMeeting(false); setMeetingPip(null); };
   const select = 'w-full p-2.5 rounded-xl bg-white/70 dark:bg-gray-900/60 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-400';
 
   return (
@@ -228,7 +231,7 @@ export default function App() {
       <ThemeToggle />
       <AnimatePresence>
         {meeting && (
-          <MeetingView entries={entries} home={home} target={target} listening={listening} connecting={connecting}
+          <MeetingView initialPip={meetingPip} entries={entries} home={home} target={target} listening={listening} connecting={connecting}
             spoken={output === 'voice'} onToggleMic={listening ? stopMic : startMic}
             onToggleSpoken={() => setOutput(output === 'voice' ? 'text' : 'voice')} onClose={leaveMeeting} />
         )}
@@ -265,7 +268,7 @@ export default function App() {
             options={[{ value: 'voice', label: 'Voice', icon: <Volume2 className="w-4 h-4" /> }, { value: 'text', label: 'Text', icon: <FileText className="w-4 h-4" /> }]} />
           <button type="button" onClick={enterMeeting}
             className="mt-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-violet-500 via-sky-500 to-cyan-500 shadow-[0_6px_20px_rgba(139,92,246,0.25)] hover:brightness-105 transition">
-            <Presentation className="w-4 h-4" />Meeting mode: live subtitles in {target === 'English' ? home : target}
+            <Presentation className="w-4 h-4" />Meeting mode: floating live subtitles in {target === 'English' ? home : target}
           </button>
         </section>
 

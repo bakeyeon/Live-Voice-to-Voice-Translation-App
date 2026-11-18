@@ -4,11 +4,11 @@ Live interpreting that keeps the feeling, not just the words. Speak or type in o
 
 A sibling of [Sentiment Translator](https://github.com/bakeyeon/sentiment_translator). It uses the same SFF (Sentiment-Formality-Friendliness) rubric, here to guide a live interpreter instead of a scorer. For the SFF concept, see [The Grue Divide: When Cognitive Accuracy Doesn't Predict Affective Alignment](https://aclanthology.org/2026.pandora-1.2/) (PANDORA @ EMNLP 2026).
 
-![Meeting mode: live Korean subtitles for an English speaker](docs/meeting-mode.png)
+![Meeting mode: a translucent subtitle bar showing live Korean subtitles for an English speaker](docs/meeting-mode.png)
 
 ## Features
 - **Voice or text, in and out:** pick the input (🎙️ voice or ⌨️ text) and the output (🔊 voice or 📝 text) separately. All four combinations work, and every exchange is kept in a conversation log, original above and translation below.
-- **Meeting mode:** full-screen live subtitles. Speak English and your audience reads Korean (or any language pair), with the spoken translation optional.
+- **Meeting mode:** live subtitles that float in their own always-on-top window, over your slides or video call. Speak English and your audience reads Korean (or any language pair), with the spoken translation optional. The newest words always stay in view. This uses Document Picture-in-Picture (Chrome and Edge); other browsers get a translucent subtitle bar inside the page.
 - **Feeling-aware interpreting:** the interpreter judges the original against SFF anchor sentences, then matches the same levels in word choice and in its voice. For example, warm and close becomes a smile in the voice, and formal becomes calm and measured. Softening particles (Thai นะ, Japanese ね, German *doch / mal*) and, in typed input, emoji, `~` and `!` are treated as feeling cues and carried over.
 - **Light and dark mode,** with the same glass look as Sentiment Translator.
 
@@ -32,5 +32,6 @@ The browser connects to the server over a WebSocket (`/live`). The server opens 
 - `node scripts/smoke-text.mjs 3000 English Korean "Thanks so much!"`: sends typed sentences and prints the translation and audio length.
 - `node scripts/smoke-voice.mjs 3000 English Korean speech.pcm`: streams 16 kHz mono PCM as if from a microphone.
 - `node scripts/smoke-meeting.mjs http://localhost:3000/ speech.wav out`: runs meeting mode in Chromium with a fake microphone and saves screenshots (needs `npm i -D playwright`).
+- `node scripts/smoke-popout.mjs http://localhost:3000/ speech.wav popout.png`: the same, popped out into the floating window.
 
 Originally built in [Google AI Studio](https://ai.studio/apps/bc9aa9d9-4543-413a-87a6-34bfb57e6663); redesigned with Claude Code.

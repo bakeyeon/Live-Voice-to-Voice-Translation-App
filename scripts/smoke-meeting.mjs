@@ -15,7 +15,7 @@ await page.getByRole('button', { name: /Meeting mode/ }).click();
 for (const s of [6, 12, 18]) {
   await page.waitForTimeout(6000);
   await page.screenshot({ path: `${out}-${s}s.png` });
-  const text = await page.locator('[aria-label="Meeting mode: live subtitles"] main').innerText();
+  const text = await page.locator('[aria-label="Meeting mode: live subtitles"]').innerText();
   console.log(`--- ${s}s ---\n${text}`);
 }
 await browser.close();
