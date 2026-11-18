@@ -1,270 +1,351 @@
-import { useState, useRef, useEffect } from 'react';
-import { Mic, Square, Globe2, Loader2, AlertCircle } from 'lucide-react';
+import { useState, useRef, useEffect, type ReactNode } from 'react';
+import { Mic, Square, Loader2, AlertCircle, Keyboard, Volume2, FileText, Send, ArrowLeftRight, Sun, Moon, VolumeX, Presentation } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { Wordmark } from './Logo';
+import { MeetingView } from './MeetingView';
 
-function pcmToBase64(f32Array: Float32Array): string {
-  const buffer = new ArrayBuffer(f32Array.length * 2);
-  const view = new DataView(buffer);
-  let offset = 0;
-  for (let i = 0; i < f32Array.length; i++, offset += 2) {
-    let s = Math.max(-1, Math.min(1, f32Array[i]));
-    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+const LANGS = ['English', 'Korean', 'German', 'Japanese', 'Thai', 'Spanish', 'French', 'Italian', 'Portuguese', 'Chinese (Mandarin)', 'Russian', 'Arabic', 'Hindi'];
+type Mode = 'voice' | 'text';
+type Entry = { id: number; source: string; translation: string; via: Mode; done: boolean };
+
+function pcmToBase64(f32: Float32Array): string {
+  const view = new DataView(new ArrayBuffer(f32.length * 2));
+  for (let i = 0; i < f32.length; i++) {
+    const s = Math.max(-1, Math.min(1, f32[i]));
+    view.setInt16(i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
   }
   let binary = '';
-  const bytes = new Uint8Array(buffer);
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
+  const bytes = new Uint8Array(view.buffer);
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
   return btoa(binary);
 }
 
 function base64ToPcm(base64: string): Float32Array {
-  const binaryString = atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  const int16Array = new Int16Array(bytes.buffer);
-  const float32Array = new Float32Array(int16Array.length);
-  for (let i = 0; i < int16Array.length; i++) {
-    float32Array[i] = int16Array[i] / 0x8000;
-  }
-  return float32Array;
+  const bin = atob(base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const int16 = new Int16Array(bytes.buffer);
+  const out = new Float32Array(int16.length);
+  for (let i = 0; i < int16.length; i++) out[i] = int16[i] / 0x8000;
+  return out;
+}
+
+const glass = 'bg-white/55 dark:bg-white/[0.04] backdrop-blur-xl border border-white/80 dark:border-white/10 shadow-[0_8px_32px_rgba(15,23,42,0.07)] dark:shadow-[0_8px_32px_rgba(0,0,0,0.35)] rounded-2xl';
+
+function ThemeToggle() {
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'));
+  const flip = () => {
+    const next = !dark;
+    document.documentElement.classList.toggle('dark', next);
+    try { localStorage.setItem('theme', next ? 'dark' : 'light'); } catch { /* storage unavailable */ }
+    setDark(next);
+  };
+  return (
+    <button type="button" onClick={flip} aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+      className="fixed top-4 right-4 z-20 w-10 h-10 flex items-center justify-center rounded-full border border-white/80 bg-white/60 backdrop-blur-xl text-amber-500 shadow-[0_4px_16px_rgba(15,23,42,0.08)] transition hover:scale-110 dark:border-white/10 dark:bg-white/[0.06] dark:text-cyan-200">
+      {dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+    </button>
+  );
+}
+
+function Segmented<T extends string>({ label, value, onChange, options }: {
+  label: string; value: T; onChange: (v: T) => void; options: { value: T; label: string; icon: ReactNode }[];
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 w-14">{label}</span>
+      <div role="radiogroup" aria-label={label} className="flex flex-1 p-1 rounded-xl bg-slate-900/5 dark:bg-white/5">
+        {options.map((o) => (
+          <button key={o.value} type="button" role="radio" aria-checked={value === o.value} onClick={() => onChange(o.value)}
+            className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition ${
+              value === o.value
+                ? 'bg-white text-violet-700 shadow-sm dark:bg-white/15 dark:text-white'
+                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'}`}>
+            {o.icon}{o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export default function App() {
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
+  const [home, setHome] = useState('English');
+  const [target, setTarget] = useState('Korean');
+  const [input, setInput] = useState<Mode>('voice');
+  const [output, setOutput] = useState<Mode>('voice');
+  const [connecting, setConnecting] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [waiting, setWaiting] = useState(false);
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [targetLang, setTargetLang] = useState('Spanish');
+  const [meeting, setMeeting] = useState(false);
 
-  const audioCtxRef = useRef<AudioContext | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const nextStartTimeRef = useRef<number>(0);
-  const streamRef = useRef<MediaStream | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const wsLangs = useRef('');
+  const readyRef = useRef<Promise<WebSocket> | null>(null);
+  const playCtx = useRef<AudioContext | null>(null);
+  const micCtx = useRef<AudioContext | null>(null);
+  const micStream = useRef<MediaStream | null>(null);
+  const micNode = useRef<ScriptProcessorNode | null>(null);
+  const nextStart = useRef(0);
+  const outputRef = useRef<Mode>(output);
+  const nextId = useRef(1);
+  const logEnd = useRef<HTMLDivElement | null>(null);
 
-  const connect = async () => {
-    setIsConnecting(true);
-    setError(null);
+  useEffect(() => { outputRef.current = output; if (output === 'text') stopPlayback(); }, [output]);
+  useEffect(() => { logEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [entries]);
+  // changing languages starts a fresh session
+  useEffect(() => { closeSession(); }, [home, target]);
+  useEffect(() => () => { stopMic(); closeSession(); }, []);
 
-    try {
-      const wsUrl = window.location.protocol === 'https:' 
-        ? `wss://${window.location.host}/live?lang=${encodeURIComponent(targetLang)}` 
-        : `ws://${window.location.host}/live?lang=${encodeURIComponent(targetLang)}`;
-        
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+  // add to the newest unfinished entry, or start one
+  const appendTo = (field: 'source' | 'translation', text: string, via: Mode) => {
+    setEntries((list) => {
+      const last = list[list.length - 1];
+      if (last && !last.done) return [...list.slice(0, -1), { ...last, [field]: last[field] + text }];
+      return [...list, { id: nextId.current++, source: '', translation: '', via, done: false, [field]: text }];
+    });
+  };
 
-      ws.onopen = async () => {
-        setIsConnected(true);
-        setIsConnecting(false);
-        try {
-          // Initialize Audio Context for 16kHz capture as required by API
-          const audioCtx = new window.AudioContext({ sampleRate: 16000 });
-          audioCtxRef.current = audioCtx;
+  const playChunk = (base64: string) => {
+    if (outputRef.current !== 'voice') return;
+    if (!playCtx.current) playCtx.current = new AudioContext({ sampleRate: 24000 });
+    const ctx = playCtx.current;
+    const pcm = base64ToPcm(base64);
+    const buf = ctx.createBuffer(1, pcm.length, 24000);
+    buf.getChannelData(0).set(pcm);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(ctx.destination);
+    if (nextStart.current < ctx.currentTime) nextStart.current = ctx.currentTime + 0.05;
+    src.start(nextStart.current);
+    nextStart.current += buf.duration;
+  };
+  const stopPlayback = () => {
+    if (playCtx.current) { playCtx.current.close(); playCtx.current = null; }
+    nextStart.current = 0;
+  };
 
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          streamRef.current = stream;
+  const closeSession = () => {
+    wsRef.current?.close();
+    wsRef.current = null;
+    readyRef.current = null;
+  };
 
-          const source = audioCtx.createMediaStreamSource(stream);
-          const processor = audioCtx.createScriptProcessor(4096, 1, 1);
-          processorRef.current = processor;
-
-          source.connect(processor);
-          processor.connect(audioCtx.destination);
-
-          processor.onaudioprocess = (e) => {
-            if (ws.readyState === WebSocket.OPEN) {
-              const base64 = pcmToBase64(e.inputBuffer.getChannelData(0));
-              ws.send(JSON.stringify({ audio: base64 }));
-            }
-          };
-
-          nextStartTimeRef.current = 0;
-        } catch (err: any) {
-          setError(err.message || 'Failed to access microphone');
-          disconnect();
-        }
-      };
-
+  // one Live session, opened on first use and reused by both voice and text input
+  const session = (): Promise<WebSocket> => {
+    const langs = `${home}|${target}`;
+    if (readyRef.current && wsLangs.current === langs && wsRef.current?.readyState === WebSocket.OPEN) return readyRef.current;
+    closeSession();
+    wsLangs.current = langs;
+    setConnecting(true);
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${location.host}/live?home=${encodeURIComponent(home)}&lang=${encodeURIComponent(target)}`);
+    wsRef.current = ws;
+    readyRef.current = new Promise((resolve, reject) => {
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
-        if (msg.error) {
-          setError(msg.error);
-          disconnect();
-          return;
-        }
-        if (msg.audio && audioCtxRef.current) {
-          playAudioChunk(audioCtxRef.current, msg.audio);
-        }
-        if (msg.interrupted) {
-          // Clear queue by advancing the start time
-          nextStartTimeRef.current = audioCtxRef.current?.currentTime || 0;
+        if (msg.ready) { setConnecting(false); resolve(ws); }
+        if (msg.error) { setError(msg.error); setConnecting(false); setWaiting(false); reject(new Error(msg.error)); }
+        if (msg.inText) appendTo('source', msg.inText, 'voice');
+        if (msg.outText) appendTo('translation', msg.outText, 'voice');
+        if (msg.audio) playChunk(msg.audio);
+        if (msg.interrupted) nextStart.current = playCtx.current?.currentTime || 0;
+        if (msg.turnComplete) {
+          setWaiting(false);
+          setEntries((list) => list.map((e, i) => (i === list.length - 1 ? { ...e, done: true } : e)));
         }
       };
+      ws.onerror = () => { setError('Connection error'); setConnecting(false); reject(new Error('Connection error')); };
+      ws.onclose = () => { if (wsRef.current === ws) { wsRef.current = null; readyRef.current = null; } setConnecting(false); stopMic(); };
+    });
+    return readyRef.current;
+  };
 
-      ws.onclose = () => {
-        disconnect();
+  const startMic = async () => {
+    setError(null);
+    try {
+      if (output === 'voice' && !playCtx.current) playCtx.current = new AudioContext({ sampleRate: 24000 });
+      const ws = await session();
+      const ctx = new AudioContext({ sampleRate: 16000 });
+      micCtx.current = ctx;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStream.current = stream;
+      const node = ctx.createScriptProcessor(4096, 1, 1);
+      micNode.current = node;
+      ctx.createMediaStreamSource(stream).connect(node);
+      node.connect(ctx.destination);
+      node.onaudioprocess = (e) => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ audio: pcmToBase64(e.inputBuffer.getChannelData(0)) }));
       };
-
-      ws.onerror = () => {
-        setError("WebSocket connection error");
-        disconnect();
-      };
+      setListening(true);
     } catch (err: any) {
-      setError(err.message || 'Connection failed');
-      setIsConnecting(false);
+      setError(err?.message || 'Could not start the microphone');
+      stopMic();
+    }
+  };
+  const stopMic = () => {
+    if (micNode.current) { micNode.current.disconnect(); micNode.current = null; }
+    micStream.current?.getTracks().forEach((t) => t.stop());
+    micStream.current = null;
+    if (micCtx.current) { micCtx.current.close(); micCtx.current = null; }
+    if (wsRef.current?.readyState === WebSocket.OPEN) wsRef.current.send(JSON.stringify({ audioEnd: true }));
+    setListening(false);
+  };
+
+  const sendText = async () => {
+    const text = draft.trim();
+    if (!text) return;
+    setError(null);
+    try {
+      if (output === 'voice' && !playCtx.current) playCtx.current = new AudioContext({ sampleRate: 24000 });
+      const ws = await session();
+      setEntries((list) => [...list.map((e) => ({ ...e, done: true })), { id: nextId.current++, source: text, translation: '', via: 'text', done: false }]);
+      setWaiting(true);
+      ws.send(JSON.stringify({ text }));
+      setDraft('');
+    } catch (err: any) {
+      setError(err?.message || 'Could not send');
     }
   };
 
-  const playAudioChunk = (audioCtx: AudioContext, base64: string) => {
-    const pcm = base64ToPcm(base64);
-    // Gemini Live API typically returns audio at 24kHz
-    const buffer = audioCtx.createBuffer(1, pcm.length, 24000);
-    buffer.getChannelData(0).set(pcm);
-
-    const source = audioCtx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(audioCtx.destination);
-
-    const currentTime = audioCtx.currentTime;
-    if (nextStartTimeRef.current < currentTime) {
-      nextStartTimeRef.current = currentTime + 0.05; // 50ms buffer to prevent crackling
-    }
-
-    source.start(nextStartTimeRef.current);
-    nextStartTimeRef.current += buffer.duration;
+  const swap = () => { setHome(target); setTarget(home); };
+  const enterMeeting = () => {
+    setInput('voice');
+    setOutput('text');
+    outputRef.current = 'text';
+    setEntries((list) => list.map((e) => ({ ...e, done: true })));
+    setMeeting(true);
+    if (!listening) startMic();
   };
-
-  const disconnect = () => {
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-    if (processorRef.current) {
-      processorRef.current.disconnect();
-      processorRef.current = null;
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    if (audioCtxRef.current) {
-      audioCtxRef.current.close();
-      audioCtxRef.current = null;
-    }
-    setIsConnected(false);
-    setIsConnecting(false);
-  };
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      disconnect();
-    };
-  }, []);
+  const leaveMeeting = () => { if (listening) stopMic(); setMeeting(false); };
+  const select = 'w-full p-2.5 rounded-xl bg-white/70 dark:bg-gray-900/60 border border-slate-200 dark:border-white/10 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-400';
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center font-sans">
-      <div className="max-w-md w-full px-6 py-12 bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 flex flex-col items-center text-center">
-        <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-6 shadow-sm">
-          <Globe2 className="w-8 h-8" />
-        </div>
-        
-        <h1 className="text-2xl font-semibold text-gray-900 mb-2 tracking-tight">Live Voice Translator</h1>
-        <p className="text-gray-500 mb-6 max-w-[280px]">
-          Speak English and hear {targetLang}, or speak {targetLang} and hear English.
-        </p>
+    <div className="min-h-screen text-slate-800 dark:text-white font-sans p-4 sm:p-8 flex flex-col items-center">
+      <ThemeToggle />
+      <AnimatePresence>
+        {meeting && (
+          <MeetingView entries={entries} home={home} target={target} listening={listening} connecting={connecting}
+            spoken={output === 'voice'} onToggleMic={listening ? stopMic : startMic}
+            onToggleSpoken={() => setOutput(output === 'voice' ? 'text' : 'voice')} onClose={leaveMeeting} />
+        )}
+      </AnimatePresence>
+      <div className="w-full max-w-2xl mx-auto flex flex-col gap-5">
+        <header className="text-center pt-8 sm:pt-2 mb-2">
+          <Wordmark />
+          <p className="mt-3 text-base sm:text-lg text-slate-500 dark:text-gray-300">Interpreting that keeps the feeling, not just the words.</p>
+        </header>
 
-        <div className="mb-8 w-full max-w-[200px]">
-          <select 
-            value={targetLang}
-            onChange={(e) => setTargetLang(e.target.value)}
-            disabled={isConnected || isConnecting}
-            className="w-full bg-gray-50 border border-gray-200 text-gray-700 py-2 px-3 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 transition-colors"
-          >
-            <option value="Spanish">Spanish</option>
-            <option value="French">French</option>
-            <option value="German">German</option>
-            <option value="Italian">Italian</option>
-            <option value="Portuguese">Portuguese</option>
-            <option value="Japanese">Japanese</option>
-            <option value="Korean">Korean</option>
-            <option value="Chinese (Mandarin)">Chinese (Mandarin)</option>
-            <option value="Russian">Russian</option>
-            <option value="Arabic">Arabic</option>
-            <option value="Hindi">Hindi</option>
-          </select>
-        </div>
+        {/* languages and modes */}
+        <section className={`${glass} p-4 sm:p-5 flex flex-col gap-4`}>
+          <div className="flex items-end gap-2">
+            <label className="flex-1">
+              <span className="block mb-1 text-sm font-medium text-violet-700 dark:text-violet-200">My language</span>
+              <select value={home} onChange={(e) => setHome(e.target.value)} disabled={listening} className={select}>
+                {LANGS.filter((l) => l !== target).map((l) => <option key={l}>{l}</option>)}
+              </select>
+            </label>
+            <button type="button" onClick={swap} disabled={listening} aria-label="Swap languages"
+              className="mb-1 w-10 h-10 shrink-0 flex items-center justify-center rounded-full text-violet-600 hover:bg-violet-500/10 dark:text-violet-200 disabled:opacity-40">
+              <ArrowLeftRight className="w-5 h-5" />
+            </button>
+            <label className="flex-1">
+              <span className="block mb-1 text-sm font-medium text-violet-700 dark:text-violet-200">Their language</span>
+              <select value={target} onChange={(e) => setTarget(e.target.value)} disabled={listening} className={select}>
+                {LANGS.filter((l) => l !== home).map((l) => <option key={l}>{l}</option>)}
+              </select>
+            </label>
+          </div>
+          <Segmented label="Input" value={input} onChange={(v) => { if (listening) stopMic(); setInput(v); }}
+            options={[{ value: 'voice', label: 'Voice', icon: <Mic className="w-4 h-4" /> }, { value: 'text', label: 'Text', icon: <Keyboard className="w-4 h-4" /> }]} />
+          <Segmented label="Output" value={output} onChange={setOutput}
+            options={[{ value: 'voice', label: 'Voice', icon: <Volume2 className="w-4 h-4" /> }, { value: 'text', label: 'Text', icon: <FileText className="w-4 h-4" /> }]} />
+          <button type="button" onClick={enterMeeting}
+            className="mt-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-violet-500 via-sky-500 to-cyan-500 shadow-[0_6px_20px_rgba(139,92,246,0.25)] hover:brightness-105 transition">
+            <Presentation className="w-4 h-4" />Meeting mode: live subtitles in {target === 'English' ? home : target}
+          </button>
+        </section>
 
-        <AnimatePresence mode="wait">
+        {/* conversation */}
+        <section className={`${glass} p-4 sm:p-5 min-h-[220px] max-h-[46vh] overflow-y-auto`} aria-live="polite">
+          {entries.length === 0 ? (
+            <p className="h-[180px] flex items-center justify-center text-center text-slate-400 dark:text-slate-500 text-sm px-6">
+              Your conversation will appear here, original above and translation below.
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {entries.map((e) => (
+                <motion.li key={e.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                  className="rounded-xl p-3 bg-white/60 dark:bg-white/[0.05] border border-white/70 dark:border-white/10">
+                  <p className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                    {e.via === 'voice' ? <Mic className="w-3.5 h-3.5" /> : <Keyboard className="w-3.5 h-3.5" />}
+                    {e.source || <span className="italic">listening…</span>}
+                  </p>
+                  <p className="mt-1.5 text-lg leading-snug text-slate-800 dark:text-white">
+                    {e.translation || (!e.done && <span className="inline-flex items-center gap-2 text-slate-400"><Loader2 className="w-4 h-4 animate-spin" />translating…</span>)}
+                  </p>
+                </motion.li>
+              ))}
+            </ul>
+          )}
+          <div ref={logEnd} />
+        </section>
+
+        <AnimatePresence>
           {error && (
-            <motion.div 
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="bg-red-50 text-red-600 px-4 py-3 rounded-lg mb-8 text-sm flex items-start gap-2 w-full text-left"
-            >
-              <AlertCircle className="w-5 h-5 shrink-0" />
-              <span>{error}</span>
+            <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+              className="flex items-start gap-2 p-3 rounded-2xl text-sm text-red-700 dark:text-red-300 bg-red-50/70 dark:bg-red-900/40 backdrop-blur-xl border border-red-300/60 dark:border-red-500/40">
+              <AlertCircle className="w-5 h-5 shrink-0" /><span>{error}</span>
             </motion.div>
           )}
         </AnimatePresence>
 
-        <div className="relative">
-          {/* Pulsing background when connected */}
-          {isConnected && (
-            <>
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1.5, opacity: 0 }}
-                transition={{ duration: 1.5, repeat: Infinity, ease: "easeOut" }}
-                className="absolute inset-0 bg-blue-400 rounded-full -z-10"
-              />
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1.8, opacity: 0 }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeOut", delay: 0.5 }}
-                className="absolute inset-0 bg-blue-300 rounded-full -z-10"
-              />
-            </>
-          )}
+        {/* input */}
+        {input === 'voice' ? (
+          <section className="flex flex-col items-center gap-4 py-2">
+            <div className="relative">
+              {listening && (
+                <>
+                  <motion.div initial={{ scale: 0.8, opacity: 0.5 }} animate={{ scale: 1.6, opacity: 0 }} transition={{ duration: 1.6, repeat: Infinity, ease: 'easeOut' }}
+                    className="absolute inset-0 rounded-full bg-violet-400 -z-10" />
+                  <motion.div initial={{ scale: 0.8, opacity: 0.4 }} animate={{ scale: 1.9, opacity: 0 }} transition={{ duration: 2, repeat: Infinity, ease: 'easeOut', delay: 0.5 }}
+                    className="absolute inset-0 rounded-full bg-cyan-300 -z-10" />
+                </>
+              )}
+              <button type="button" onClick={listening ? stopMic : startMic} disabled={connecting}
+                aria-label={listening ? 'Stop listening' : 'Start listening'}
+                className={`relative w-20 h-20 rounded-full flex items-center justify-center text-white transition-all duration-300 shadow-lg disabled:opacity-60 ${
+                  listening ? 'bg-rose-500 hover:bg-rose-600 shadow-rose-300/50' : 'bg-gradient-to-br from-violet-500 via-sky-500 to-cyan-400 hover:scale-105 shadow-violet-300/50 dark:shadow-violet-900/50'}`}>
+                {connecting ? <Loader2 className="w-9 h-9 animate-spin" /> : listening ? <Square className="w-8 h-8 fill-current" /> : <Mic className="w-9 h-9" />}
+              </button>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {connecting ? 'Connecting…' : listening ? `Listening — speak ${home} or ${target}` : 'Tap the mic and speak'}
+            </p>
+          </section>
+        ) : (
+          <section className={`${glass} p-3 flex items-end gap-2`}>
+            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); sendText(); } }}
+              placeholder={`Type in ${home} or ${target}… emoji and ~ count as feeling cues`}
+              className="flex-1 resize-none bg-transparent p-2 text-base text-slate-800 dark:text-white placeholder:text-slate-400 focus:outline-none" />
+            <button type="button" onClick={sendText} disabled={!draft.trim() || connecting || waiting} aria-label="Translate"
+              className="w-11 h-11 shrink-0 flex items-center justify-center rounded-xl text-white bg-gradient-to-br from-violet-500 to-cyan-500 disabled:opacity-40 hover:scale-105 transition">
+              {connecting || waiting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+            </button>
+          </section>
+        )}
 
-          <button
-            onClick={isConnected ? disconnect : connect}
-            disabled={isConnecting}
-            className={`
-              relative w-24 h-24 rounded-full flex items-center justify-center
-              transition-all duration-300 shadow-lg text-white group
-              ${isConnected 
-                ? 'bg-red-500 hover:bg-red-600 shadow-red-200 focus:ring-4 focus:ring-red-100' 
-                : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200 focus:ring-4 focus:ring-blue-100'}
-              disabled:opacity-50 disabled:cursor-not-allowed
-            `}
-            aria-label={isConnected ? "Stop translating" : "Start translating"}
-          >
-            {isConnecting ? (
-              <Loader2 className="w-10 h-10 animate-spin" />
-            ) : isConnected ? (
-              <Square className="w-10 h-10 fill-current group-hover:scale-110 transition-transform" />
-            ) : (
-              <Mic className="w-10 h-10 group-hover:scale-110 transition-transform" />
-            )}
-          </button>
-        </div>
-
-        <p className="mt-8 text-sm font-medium transition-colors duration-300">
-          {isConnecting && <span className="text-gray-500">Connecting...</span>}
-          {isConnected && <span className="text-blue-600">Translation active. Start speaking.</span>}
-          {!isConnecting && !isConnected && <span className="text-gray-500">Tap the mic to start</span>}
-        </p>
-
-        <div className="mt-12 text-xs text-gray-400 space-y-1">
-          <p>Make sure your microphone is enabled.</p>
-          <p>Powered by Gemini Live API</p>
-        </div>
+        <footer className="text-center text-xs text-slate-400 dark:text-slate-500 space-y-1 pb-4">
+          <p className="flex items-center justify-center gap-1.5">
+            {output === 'voice' ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+            {output === 'voice' ? 'Translations are spoken aloud and written below.' : 'Text only: translations are written, not spoken.'}
+          </p>
+          <p>Keeps sentiment, formality and friendliness with the SFF rubric · Powered by the Gemini Live API</p>
+        </footer>
       </div>
     </div>
   );

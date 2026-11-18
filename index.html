@@ -3,11 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <title>Sentiment Interpreter</title>
+    <meta name="description" content="Live interpreting that keeps the feeling, not just the words: voice or text in, voice or text out, guided by the SFF (Sentiment-Formality-Friendliness) rubric." />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cdefs%3E%3ClinearGradient id='t' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238b5cf6'/%3E%3Cstop offset='.5' stop-color='%2338bdf8'/%3E%3Cstop offset='1' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3ClinearGradient id='b' x1='0' x2='1'%3E%3Cstop offset='0' stop-color='%23f87171'/%3E%3Cstop offset='.5' stop-color='%23facc15'/%3E%3Cstop offset='1' stop-color='%234ade80'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='2' y='2' width='44' height='44' rx='13' fill='url(%23t)'/%3E%3Cpath d='M13 11.5h22a4.5 4.5 0 0 1 4.5 4.5v12a4.5 4.5 0 0 1-4.5 4.5H20l-6.5 5v-5H13A4.5 4.5 0 0 1 8.5 28V16A4.5 4.5 0 0 1 13 11.5z' fill='none' stroke='%23fff' stroke-width='2.2' stroke-linejoin='round'/%3E%3Crect x='14' y='16' width='20' height='3' rx='1.5' fill='url(%23b)'/%3E%3Cg stroke='%23fff' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M15 25v2M19.5 23v6M24 21.5v9M28.5 23.5v5M33 25v2'/%3E%3C/g%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;700&display=swap" rel="stylesheet" />
+    <script>
+      (function () {
+        var dark;
+        try { var saved = localStorage.getItem('theme'); dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches; }
+        catch (e) { dark = matchMedia('(prefers-color-scheme: dark)').matches; }
+        document.documentElement.classList.toggle('dark', dark);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-
