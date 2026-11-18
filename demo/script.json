@@ -1,0 +1,16 @@
+{
+  "voice": "en-US-AvaNeural",
+  "lines": {
+    "intro1":       { "say": "Meet Sentiment Interpreter, a live interpreter that keeps the feeling, not just the words.", "cap": "Meet Sentiment Interpreter: it keeps the feeling, not just the words." },
+    "intro2":       { "say": "Choose how you talk to it, by voice or by text, and how you hear it back.", "cap": "Talk to it by voice or by text, and hear or read it back." },
+    "text":         { "say": "First, typing. A warm little thank-you, with a tilde and an emoji.", "cap": "First, typing: a warm little thank-you, with ~ and 😊." },
+    "textAfter":    { "say": "The aww, the tilde and the smile all come through, in a warm Korean voice.", "cap": "The “aww”, the ~ and the smile all come through, in a warm Korean voice." },
+    "voice":        { "say": "Now speech. Here's German, with doch mal.", "cap": "Now speech: German, with doch mal." },
+    "voiceAfter":   { "say": "The casual, inviting tone stays casual in Korean.", "cap": "The casual, inviting tone stays casual in Korean." },
+    "pace":         { "say": "Pace sets how quickly it translates after you pause.", "cap": "Pace sets how quickly it translates after you pause." },
+    "meeting":      { "say": "Meeting mode puts live subtitles on screen. In Chrome, they float above your slides or video call.", "cap": "Meeting mode: live subtitles that float above your slides or video call." },
+    "meetingAfter": { "say": "Speak in short chunks, and the subtitles keep up.", "cap": "Speak in short chunks, and the subtitles keep up." },
+    "rubric":       { "say": "Every translation is guided by the same rubric as Sentiment Translator: sentiment, formality and friendliness.", "cap": "Guided by the SFF rubric: sentiment, formality and friendliness." },
+    "outro":        { "say": "Built on the Gemini Live API, and redesigned with Claude Code. Thanks for watching!", "cap": "Built on the Gemini Live API, redesigned with Claude Code. Thanks for watching!" }
+  }
+}

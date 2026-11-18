@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+demo/cache/
+demo/speech/
+demo/voice/
+demo/raw/
+demo/build/
+demo/*.mp4

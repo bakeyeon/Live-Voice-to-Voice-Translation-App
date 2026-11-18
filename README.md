@@ -4,6 +4,13 @@ Live interpreting that keeps the feeling, not just the words. Speak or type in o
 
 A sibling of [Sentiment Translator](https://github.com/bakeyeon/sentiment_translator). It uses the same SFF (Sentiment-Formality-Friendliness) rubric, here to guide a live interpreter instead of a scorer. For the SFF concept, see [The Grue Divide: When Cognitive Accuracy Doesn't Predict Affective Alignment](https://aclanthology.org/2026.pandora-1.2/) (PANDORA @ EMNLP 2026).
 
+## Demo
+[![Sentiment Interpreter demo: live Korean subtitles for an English speaker in meeting mode, next to a card showing subtitles over slides](docs/demo-preview.gif)](https://youtu.be/HIIB_evJC6Y)
+
+▶️ Click the GIF or [watch the full demo on YouTube (1:38)](https://youtu.be/HIIB_evJC6Y), with sound: typed English spoken back in warm Korean, German *doch mal* kept casual, and live meeting subtitles. You hear the real speakers and the interpreter's own voice.
+
+🎬 The demo video was made with [Claude Code](https://claude.com/claude-code), without a designer or video editor: the scripts in [`demo/`](demo/) record the app at phone size, replay real Gemini Live responses, and compose the cards, narration and audio. The method is described in Sentiment Translator's [guide to making a research demo video](https://github.com/bakeyeon/sentiment_translator/blob/main/docs/demo-video.md).
+
 ![Meeting mode: a translucent subtitle bar showing live Korean subtitles for an English speaker](docs/meeting-mode.png)
 
 ## Features

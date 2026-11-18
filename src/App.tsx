@@ -87,6 +87,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [meeting, setMeeting] = useState(false);
   const [meetingPip, setMeetingPip] = useState<Window | null>(null);
+  const [meetingFrom, setMeetingFrom] = useState(0);   // subtitles only show what's said after meeting mode starts
 
   const wsRef = useRef<WebSocket | null>(null);
   const wsLangs = useRef('');
@@ -226,6 +227,7 @@ export default function App() {
     setOutput('text');
     outputRef.current = 'text';
     setEntries((list) => list.map((e) => ({ ...e, done: true })));
+    setMeetingFrom(nextId.current);
     setMeeting(true);
     if (!listening) startMic();
   };
@@ -237,7 +239,7 @@ export default function App() {
       <ThemeToggle />
       <AnimatePresence>
         {meeting && (
-          <MeetingView initialPip={meetingPip} entries={entries} home={home} target={target} listening={listening} connecting={connecting}
+          <MeetingView initialPip={meetingPip} entries={entries.filter((e) => e.id >= meetingFrom)} home={home} target={target} listening={listening} connecting={connecting}
             spoken={output === 'voice'} onToggleMic={listening ? stopMic : startMic}
             onToggleSpoken={() => setOutput(output === 'voice' ? 'text' : 'voice')} onClose={leaveMeeting} />
         )}

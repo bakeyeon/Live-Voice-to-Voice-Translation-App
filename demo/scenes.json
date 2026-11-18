@@ -1,0 +1,5 @@
+[
+  { "id": "text-warm", "home": "English", "target": "Korean", "text": "Aww thank you so much~ you're the best 😊" },
+  { "id": "voice-german", "home": "English", "target": "Korean", "speech": "demo/speech/de.pcm" },
+  { "id": "meeting", "home": "English", "target": "Korean", "speech": "demo/speech/meeting.pcm" }
+]
